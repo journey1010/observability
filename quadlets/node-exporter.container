@@ -1,0 +1,18 @@
+[Container]
+# Métricas de host: CPU/RAM/disk/red de la VM completa (no por container).
+Image=docker.io/prom/node-exporter:v1.8.2
+ContainerName=node-exporter
+Pod=observability.pod
+
+Volume=/proc:/host/proc:ro
+Volume=/sys:/host/sys:ro
+Volume=/:/rootfs:ro
+
+Exec=--path.procfs=/host/proc --path.sysfs=/host/sys --path.rootfs=/rootfs --collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($|/)
+
+[Service]
+Restart=always
+RestartSec=10s
+
+[Install]
+WantedBy=default.target

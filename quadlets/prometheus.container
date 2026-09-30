@@ -1,0 +1,16 @@
+[Container]
+Image=docker.io/prom/prometheus:v2.55.1
+ContainerName=prometheus
+Pod=observability.pod
+
+Volume=%h/.config/containers/systemd/observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro,Z
+Volume=prometheus-data.volume:/prometheus
+
+Exec=--config.file=/etc/prometheus/prometheus.yml --storage.tsdb.retention.time=15d
+
+[Service]
+Restart=always
+RestartSec=10s
+
+[Install]
+WantedBy=default.target

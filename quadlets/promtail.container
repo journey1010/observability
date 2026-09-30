@@ -1,0 +1,23 @@
+[Container]
+Image=docker.io/grafana/promtail:3.1.1
+ContainerName=promtail
+Pod=observability.pod
+
+# journald es el log-driver default de este podman rootless (podman info
+# → Host.LogDriver). Promtail lee el journal directo, no pasa por
+# `podman logs` ni docker.sock — no hace falta correr como root ni dar
+# acceso al socket de podman solo para logs.
+Volume=%h/.config/containers/systemd/observability/promtail-config.yaml:/etc/promtail/config.yaml:ro,Z
+Volume=/var/log/journal:/var/log/journal:ro
+Volume=/run/log/journal:/run/log/journal:ro
+Volume=/etc/machine-id:/etc/machine-id:ro
+Volume=promtail-positions.volume:/tmp/positions
+
+Exec=-config.file=/etc/promtail/config.yaml
+
+[Service]
+Restart=always
+RestartSec=10s
+
+[Install]
+WantedBy=default.target

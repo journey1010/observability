@@ -1,0 +1,16 @@
+[Pod]
+# Pod que agrupa todo el stack de observabilidad (logs + metrics).
+# Namespace de red compartido: los containers se hablan por localhost.
+PodName=observability
+
+# Solo Grafana sale al host. Loki/Prometheus/exporters quedan internos
+# al pod (se accede a ellos vía Grafana como datasource, no hace falta
+# publicarlos).
+PublishPort=3000:3000
+
+[Service]
+Restart=always
+RestartSec=10s
+
+[Install]
+WantedBy=default.target

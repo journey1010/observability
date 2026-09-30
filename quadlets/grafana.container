@@ -1,0 +1,20 @@
+[Container]
+Image=docker.io/grafana/grafana:11.3.1
+ContainerName=grafana
+Pod=observability.pod
+
+Volume=grafana-data.volume:/var/lib/grafana
+Volume=%h/.config/containers/systemd/observability/grafana/provisioning:/etc/grafana/provisioning:ro,Z
+Volume=%h/.config/containers/systemd/observability/grafana/dashboards:/var/lib/grafana/dashboards:ro,Z
+
+Environment=GF_SECURITY_ADMIN_USER=admin
+Environment=GF_USERS_ALLOW_SIGN_UP=false
+# Password real vía secret, no queda en texto plano en el quadlet.
+Secret=observability_grafana_admin_pass,type=env,target=GF_SECURITY_ADMIN_PASSWORD
+
+[Service]
+Restart=always
+RestartSec=10s
+
+[Install]
+WantedBy=default.target

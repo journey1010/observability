@@ -1,0 +1,14 @@
+[Container]
+Image=docker.io/grafana/loki:3.1.1
+ContainerName=loki
+Pod=observability.pod
+
+Volume=%h/.config/containers/systemd/observability/loki-config.yaml:/etc/loki/local-config.yaml:ro,Z
+Volume=loki-data.volume:/loki
+
+[Service]
+Restart=always
+RestartSec=10s
+
+[Install]
+WantedBy=default.target

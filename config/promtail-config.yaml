@@ -1,0 +1,35 @@
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+
+positions:
+  filename: /tmp/positions/positions.yaml
+
+clients:
+  # Mismo pod → mismo netns → loki se alcanza por localhost.
+  - url: http://localhost:3100/loki/api/v1/push
+
+scrape_configs:
+  # Journal completo del host. Podman (log-driver=journald, el default en
+  # este setup) escribe cada línea de stdout/stderr de cada container acá,
+  # con los campos CONTAINER_NAME / CONTAINER_TAG / CONTAINER_ID seteados.
+  - job_name: journal
+    journal:
+      max_age: 12h
+      labels:
+        job: containers
+    relabel_configs:
+      # __journal_container_name → label "container" (el nombre real del
+      # container, ej. pide-app, pide-scheduler)
+      - source_labels: ['__journal_container_name']
+        target_label: container
+      - source_labels: ['__journal_container_tag']
+        target_label: container_tag
+      - source_labels: ['__journal__systemd_unit']
+        target_label: unit
+      # Descarta ruido de journal que no viene de containers (sin
+      # CONTAINER_NAME, ej. logs del propio systemd/kernel) — comentar si
+      # también querés esos.
+      - source_labels: ['__journal_container_name']
+        regex: '^$'
+        action: drop
