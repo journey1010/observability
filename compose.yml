@@ -1,0 +1,109 @@
+# Stack de observabilidad para probar rápido sin quadlets/systemd.
+# Mismo concepto que observability.pod: todos los containers comparten un
+# netns, por eso las configs siguen usando localhost tal cual.
+#   podman-compose up -d   (docker compose también funciona: docker es podman)
+name: observability
+
+services:
+  # Ancla del netns compartido: en quadlets lo hace el .pod, en compose
+  # el primer servicio al que se enganchan los demás. Publica los puertos.
+  grafana:
+    image: docker.io/grafana/grafana:11.3.1
+    container_name: grafana
+    ports:
+      - "3000:3000"   # UI
+      - "3100:3100"   # loki      (debug)
+      - "9090:9090"   # prometheus(debug)
+      - "9882:9882"   # podman-exporter (debug)
+      - "9100:9100"   # node-exporter (debug)
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./config/grafana/provisioning:/etc/grafana/provisioning:ro,z
+      - ./config/grafana/dashboards:/var/lib/grafana/dashboards:ro,z
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+    restart: unless-stopped
+
+  loki:
+    image: docker.io/grafana/loki:3.1.1
+    container_name: loki
+    network_mode: service:grafana
+    volumes:
+      - ./config/loki-config.yaml:/etc/loki/local-config.yaml:ro,z
+      - loki-data:/loki
+    restart: unless-stopped
+
+  promtail:
+    image: docker.io/grafana/promtail:3.1.1
+    container_name: promtail
+    network_mode: service:grafana
+    # keep-id + keep-groups: el journal del host es root:systemd-journal
+    # 0640 y SELinux está enforcing, sin esto promtail no lee nada.
+    userns_mode: keep-id
+    group_add:
+      - keep-groups
+    security_opt:
+      - label=disable
+    volumes:
+      - ./config/promtail-config.yaml:/etc/promtail/config.yaml:ro,z
+      - /var/log/journal:/var/log/journal:ro
+      - /run/log/journal:/run/log/journal:ro
+      - /etc/machine-id:/etc/machine-id:ro
+      - ./data/promtail-positions:/tmp/positions
+    command: ["-config.file=/etc/promtail/config.yaml"]
+    restart: unless-stopped
+
+  prometheus:
+    image: docker.io/prom/prometheus:v2.55.1
+    container_name: prometheus
+    network_mode: service:grafana
+    volumes:
+      - ./config/prometheus.yml:/etc/prometheus/prometheus.yml:ro,z
+      - prometheus-data:/prometheus
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=15d
+    restart: unless-stopped
+
+  podman-exporter:
+    image: quay.io/navidys/prometheus-podman-exporter:v1.14.0
+    container_name: podman-exporter
+    network_mode: service:grafana
+    # La imagen corre como `nobody`, y el podman.sock del host es
+    # srw-rw---- de tu usuario: sin keep-id el exporter no puede hablar
+    # con el socket.
+    userns_mode: keep-id
+    group_add:
+      - keep-groups
+    security_opt:
+      - label=disable
+    volumes:
+      - ${XDG_RUNTIME_DIR:-/run/user/1000}/podman/podman.sock:/run/podman/podman.sock:ro
+    environment:
+      CONTAINER_HOST: unix:///run/podman/podman.sock
+    command: ["--collector.enable-all"]
+    restart: unless-stopped
+
+  node-exporter:
+    image: docker.io/prom/node-exporter:v1.8.2
+    container_name: node-exporter
+    network_mode: service:grafana
+    security_opt:
+      - label=disable
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    command:
+      - --path.procfs=/host/proc
+      - --path.sysfs=/host/sys
+      - --path.rootfs=/rootfs
+      - --collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($|/)
+    restart: unless-stopped
+
+volumes:
+  grafana-data:
+  loki-data:
+  prometheus-data:
